@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Texty</string>
+    <string name="accessibility_service_description">Let an LLM fix your spelling and grammar.</string>
+</resources>
