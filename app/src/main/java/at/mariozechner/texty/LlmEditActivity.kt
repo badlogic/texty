@@ -161,6 +161,10 @@ class LlmEditActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDetachedFromWindow() {
+        openAI.close()
+    }
+
     private fun triggerLlmCompletion() {
         val textToEdit = editText.text.toString()
         val prompt = promptEditText.text.toString()

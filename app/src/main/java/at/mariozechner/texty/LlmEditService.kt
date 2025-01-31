@@ -71,30 +71,24 @@ class LlmEditService : AccessibilityService() {
         }
 
         val sourceNode = event.source
-        val isEditText = event.className?.contains("EditText") == true
+        val isEditText = isTextField(sourceNode)
 
         when (event.eventType) {
-            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
-                if (isEditText && sourceNode != null) {
-                    val nodeId = "${sourceNode.windowId}${sourceNode.viewIdResourceName}"
-                    handleEditTextFocus(nodeId, sourceNode)
-                } else if (!isEditText) {
-                    // Only hide if we're focusing something that's definitely not an EditText
-                    hideFloatingButton()
-                }
-            }
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
                 if (isEditText && sourceNode != null) {
                     val nodeId = "${sourceNode.windowId}${sourceNode.viewIdResourceName}"
-                    handleTextChange(nodeId, event.text?.joinToString("") ?: "")
+                    handleTextChange(nodeId, event.text.joinToString("") ?: "")
                 }
             }
             else -> {
-                if (floatingButton != null) {
-                    val focusedView = findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-                    if (focusedView == null || focusedView.className?.contains("EditText") != true) {
-                        hideFloatingButton();
-                    }
+                val focusedView = findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+                if (!isTextField(focusedView)) {
+                    if (focusedView?.className != "android.webkit.WebView" && floatingButton != null) {
+                        hideFloatingButton()
+                    };
+                } else {
+                    val nodeId = "${focusedView.windowId}${focusedView.viewIdResourceName}"
+                    handleEditTextFocus(nodeId, focusedView)
                 }
             }
         }
@@ -102,8 +96,8 @@ class LlmEditService : AccessibilityService() {
         sourceNode?.recycle()
     }
 
-    private fun isEditText(node: AccessibilityNodeInfo): Boolean {
-        return node.className?.contains("EditText") == true
+    private fun isTextField(node: AccessibilityNodeInfo?): Boolean {
+        return node != null && (node.className?.contains("EditText") == true || node.className?.contains("MultiAutoCompleteTextView") == true)
     }
 
     private fun handleEditTextFocus(nodeId: String, node: AccessibilityNodeInfo) {
