@@ -19,13 +19,7 @@ class LlmEditService : AccessibilityService() {
     private var floatingButton: View? = null
     private var isReceiverRegistered = false
 
-    // State management
-    private data class EditTextState(
-        val id: String,
-        val content: String
-    )
-
-    private var currentEditText: EditTextState? = null
+    private var currentEditText: String? = null
     private var pendingUpdate: String? = null
 
     companion object {
@@ -76,19 +70,19 @@ class LlmEditService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
                 if (isEditText && sourceNode != null) {
-                    val nodeId = "${sourceNode.windowId}${sourceNode.viewIdResourceName}"
-                    handleTextChange(nodeId, event.text.joinToString("") ?: "")
+                    currentEditText = event.text.joinToString("");
                 }
             }
             else -> {
                 val focusedView = findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-                if (!isTextField(focusedView)) {
-                    if (focusedView?.className != "android.webkit.WebView" && floatingButton != null) {
+                if (focusedView == null) {
+                    if (floatingButton != null) {
                         hideFloatingButton()
                     };
                 } else {
-                    val nodeId = "${focusedView.windowId}${focusedView.viewIdResourceName}"
-                    handleEditTextFocus(nodeId, focusedView)
+                    if (focusedView.packageName != packageName) {
+                        handleEditTextFocus(focusedView)
+                    }
                 }
             }
         }
@@ -100,38 +94,35 @@ class LlmEditService : AccessibilityService() {
         return node != null && (node.className?.contains("EditText") == true || node.className?.contains("MultiAutoCompleteTextView") == true)
     }
 
-    private fun handleEditTextFocus(nodeId: String, node: AccessibilityNodeInfo) {
+    private fun handleEditTextFocus(node: AccessibilityNodeInfo) {
         val text = node.text?.toString() ?: ""
 
-        // If we have a pending update for this EditText
-        if (pendingUpdate != null && currentEditText?.id == nodeId) {
-            updateEditTextContent(node, pendingUpdate!!)
+        if (pendingUpdate != null) {
+            updateEditTextContent(pendingUpdate!!)
             pendingUpdate = null
         }
 
-        // Update current EditText state
-        currentEditText = EditTextState(nodeId, text)
+        currentEditText = text
 
-        // Show floating button if we have text
         if (text.isNotEmpty()) {
             showFloatingButton()
         }
     }
 
-    private fun handleTextChange(nodeId: String, newText: String) {
-        if (currentEditText?.id == nodeId) {
-            currentEditText = currentEditText?.copy(content = newText)
+    private fun updateEditTextContent(newText: String) {
+        val freshNode = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        if (freshNode?.isEditable == true) {
+            val arguments = Bundle().apply {
+                putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    newText
+                )
+            }
+            if (!freshNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
+                android.util.Log.d("TextDebug", "Failed to update EditText content");
+            }
+            freshNode.recycle()  // Don't forget to recycle the fresh node
         }
-    }
-
-    private fun updateEditTextContent(node: AccessibilityNodeInfo, newText: String) {
-        val arguments = Bundle().apply {
-            putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                newText
-            )
-        }
-        node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
     }
 
     private fun showFloatingButton() {
@@ -144,10 +135,10 @@ class LlmEditService : AccessibilityService() {
                 textSize = 10f
 
                 setOnClickListener {
-                    currentEditText?.let { state ->
+                    currentEditText?.let { text ->
                         val intent = Intent(context, LlmEditActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            putExtra("text_content", state.content)
+                            putExtra("text_content", text)
                         }
                         startActivity(intent)
                         hideFloatingButton()
